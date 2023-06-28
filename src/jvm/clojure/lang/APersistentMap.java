@@ -340,6 +340,7 @@ public Set entrySet(){
 public Object get(Object key){
 	return valAt(key);
 }
+public Object getOrDefault(Object key, Object defaultVal) {return valAt(key, defaultVal); }
 
 public boolean isEmpty(){
 	return count() == 0;
