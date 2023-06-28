@@ -16,6 +16,7 @@ import java.util.*;
 public abstract class APersistentMap extends AFn implements IPersistentMap, Map, Iterable, Serializable, MapEquivalence, IHashEq {
 
 private static final long serialVersionUID = 6736310834519110267L;
+private static final Object NOT_FOUND = new Object();
 
 int _hash;
 int _hasheq;
@@ -61,15 +62,31 @@ static public boolean mapEquals(IPersistentMap m1, Object obj){
 	if(m.size() != m1.count())
 		return false;
 
-	for(ISeq s = m1.seq(); s != null; s = s.next())
-		{
-		Map.Entry e = (Map.Entry) s.first();
-		boolean found = m.containsKey(e.getKey());
+	if(m1 instanceof IKVReduce)
+		return equalsByKVReduce((IKVReduce)m1, m);
 
-		if(!found || !Util.equals(e.getValue(), m.get(e.getKey())))
-			return false;
+	return equalsBySeq(m1, m);
+}
+
+static private boolean equalsByKVReduce(IKVReduce m1, Map m2) {
+	return (boolean) m1.kvreduce(new AFn() {
+		public Object invoke(Object b, Object k, Object v) {
+			Object val = m2.getOrDefault(k, NOT_FOUND);
+			if((NOT_FOUND == val) || !Util.equals(v, val))
+				return new Reduced(RT.F);
+			return b;
 		}
+	}, RT.T);
+}
 
+static private boolean equalsBySeq(IPersistentMap m1, Map m) {
+	for (ISeq s = m1.seq(); s != null; s = s.next()) {
+		Map.Entry e = (Map.Entry) s.first();
+		Object key = e.getKey();
+		Object val = m.getOrDefault(key, NOT_FOUND);
+		if((NOT_FOUND == val) || !Util.equals(e.getValue(), val))
+			return false;
+	}
 	return true;
 }
 
@@ -84,17 +101,34 @@ public boolean equiv(Object obj){
 	if(m.size() != size())
 		return false;
 
-	for(ISeq s = seq(); s != null; s = s.next())
-		{
-		Map.Entry e = (Map.Entry) s.first();
-		boolean found = m.containsKey(e.getKey());
+	if(this instanceof IKVReduce)
+		return equivByKVReduce((IKVReduce) this, m);
 
-		if(!found || !Util.equiv(e.getValue(), m.get(e.getKey())))
-			return false;
+	return equivBySeq(this, m);
+}
+
+static private boolean equivByKVReduce(IKVReduce m1, Map m2) {
+	return (boolean) m1.kvreduce(new AFn() {
+		public Object invoke(Object b, Object k, Object v) {
+			Object val = m2.getOrDefault(k, NOT_FOUND);
+			if ((NOT_FOUND == val) || !Util.equiv(v, val))
+				return new Reduced(RT.F);
+			return b;
 		}
+	}, RT.T);
+}
 
+static private boolean equivBySeq(IPersistentMap m1, Map m2) {
+	for (ISeq s = m1.seq(); s != null; s = s.next()) {
+		Map.Entry e = (Map.Entry) s.first();
+		Object key = e.getKey();
+		Object val = m2.getOrDefault(key, NOT_FOUND);
+		if ((NOT_FOUND == val) || !Util.equiv(e.getValue(), val))
+			return false;
+	}
 	return true;
 }
+
 public int hashCode(){
     int cached = this._hash;
 	if(cached == 0)
@@ -340,7 +374,10 @@ public Set entrySet(){
 public Object get(Object key){
 	return valAt(key);
 }
-public Object getOrDefault(Object key, Object defaultVal) {return valAt(key, defaultVal); }
+
+public Object getOrDefault(Object key, Object defaultVal) {
+    return valAt(key, defaultVal);
+}
 
 public boolean isEmpty(){
 	return count() == 0;
